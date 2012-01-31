@@ -22,6 +22,7 @@ import imp
 import sys
 import time
 import threading
+import traceback
 
 class StackLogger(object):
     def __init__(self, outfile, threshold):
@@ -37,23 +38,30 @@ class StackLogger(object):
             return self.local.calls
 
     def __call__(self, frame, event, arg):
-        if event == 'call':
-            if frame.f_code.co_filename != __file__:
+        try:
+            if event == 'call':
                 calls = self.get_calls()
                 calls.append((time.time(), frame))
                 return self
-        elif event == 'return':
-            calls = self.get_calls()
-            for i in range(len(calls)-1, -1, -1):
-                if calls[i][1] is frame:
-                    break
+            elif event == 'return' or event == 'exception':
+                calls = self.get_calls()
+                for i in range(len(calls)-1, -1, -1):
+                    if calls[i][1] is frame:
+                        break
+                else:
+                    return
+                start_time, _frame = calls[i]
+                calls[i:] = ()
+                end_time = time.time()
+                if end_time - start_time >= self.threshold:
+                    print '%s%s %s %s %s %s' % (' ' * len(calls), frame.f_code.co_filename, frame.f_code.co_name, frame.f_code.co_firstlineno, start_time, (end_time - start_time))
+                return self
+            elif event == 'line':
+                return self
             else:
-                return
-            start_time, _frame = calls[i]
-            calls[i:] = ()
-            end_time = time.time()
-            if end_time - start_time >= self.threshold:
-                print '%s%s %s %s %s %s' % (' ' * len(calls), frame.f_code.co_filename, frame.f_code.co_name, frame.f_code.co_firstlineno, start_time, (end_time - start_time))
+                print event
+        except:
+            traceback.print_exc()
 
 def main(argv):
     import __main__ # must prevent the module from being collected when we edit sys.modules, as that resets the globals
